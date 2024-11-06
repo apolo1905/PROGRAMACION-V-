@@ -1,0 +1,65 @@
+import json
+import boto3
+from botocore.exceptions import Client
+from datetime import datetime
+import uuid
+
+# Crear cliente de DynamoDB
+dynamodb = boto3.resource('dynamodb')
+table = dynamodb.Table('Loans')
+
+def lambda_handler(event, context):
+    # Obtener los datos del cuerpo de la solicitud
+    try:
+        data = json.loads(event['body'])
+        user_id = data['userId']
+        book_id = data['bookId']
+        loan_date = data.get('loanDate', datetime.now().isoformat())
+        return_date = data.get('returnDate', None)
+        
+        # Generar un identificador único para el préstamo
+        loan_id = str(uuid.uuid4())
+        
+        # Crear el registro de préstamo en DynamoDB
+        item = {
+            'userId': user_id,
+            'loanId': loan_id,
+            'bookId': book_id,
+            'loanDate': loan_date,
+            'returnDate': return_date,
+        }
+        
+        table.put_item(Item=item)
+        
+        # Respuesta de éxito
+        return {
+            'statusCode': 200,
+            'body': json.dumps({'message': 'Préstamo registrado correctamente', 'loanId': loan_id})
+        }
+    
+    except KeyError as e:
+        # Error si falta algún dato en la solicitud
+        return {
+            'statusCode': 400,
+            'body': json.dumps({'error': f'Missing field: {str(e)}'})
+        }
+    except ClientError as e:
+        # Error con DynamoDB
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': 'Error en DynamoDB', 'details': str(e)})
+        }
+    except Exception as e:
+        # Error general
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': 'Error desconocido', 'details': str(e)})
+        }
+
+
+{
+    "userId": "user123",
+    "bookId": "book456",
+    "loanDate": "2024-11-06T12:00:00",
+    "returnDate": "2024-12-06T12:00:00"
+}
