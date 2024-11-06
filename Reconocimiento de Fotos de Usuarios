@@ -1,0 +1,67 @@
+import json
+import boto3
+from botocore.exceptions import ClientError
+
+# Inicializar los clientes de Rekognition, S3 y SES
+rekognition = boto3.client('rekognition')
+s3 = boto3.client('s3')
+ses = boto3.client('ses')
+
+# Configuración
+COLLECTION_ID = 'UsuariosRegistrados'
+ADMIN_EMAIL = 'admin@example.com'  # Cambia a la dirección de correo del administrador
+
+def lambda_handler(event, context):
+    # Obtener información del evento de S3
+    bucket = event['Records'][0]['s3']['bucket']['name']
+    key = event['Records'][0]['s3']['object']['key']
+    
+    # Llamada a Rekognition para buscar coincidencias de rostro
+    try:
+        response = rekognition.search_faces_by_image(
+            CollectionId=COLLECTION_ID,
+            Image={'S3Object': {'Bucket': bucket, 'Name': key}},
+            MaxFaces=1,
+            FaceMatchThreshold=95
+        )
+        face_matches = response['FaceMatches']
+        
+        # Si se encontró un rostro que coincide
+        if face_matches:
+            matched_user = face_matches[0]['Face']['ExternalImageId']
+            return {
+                'statusCode': 200,
+                'body': json.dumps(f'Usuario reconocido: {matched_user}')
+            }
+        else:
+            # Enviar correo si no hay coincidencia
+            send_alert_email(key)
+            return {
+                'statusCode': 200,
+                'body': json.dumps('Usuario no reconocido, se envió una alerta.')
+            }
+    
+    except ClientError as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps(f'Error en Rekognition: {str(e)}')
+        }
+
+def send_alert_email(photo_key):
+    # Enviar correo usando SES
+    subject = "Usuario no reconocido - Acción requerida"
+    body_text = (
+        f"No se ha podido identificar al usuario en la foto {photo_key}. "
+        "Por favor, realice la matriculación del usuario en el sistema."
+    )
+    try:
+        ses.send_email(
+            Source=ADMIN_EMAIL,
+            Destination={'ToAddresses': [ADMIN_EMAIL]},
+            Message={
+                'Subject': {'Data': subject},
+                'Body': {'Text': {'Data': body_text}}
+            }
+        )
+    except ClientError as e:
+        print(f"Error enviando correo: {str(e)}")
