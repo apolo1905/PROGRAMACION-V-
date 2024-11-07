@@ -1,0 +1,42 @@
+[web_servers]
+server1 ansible_host=192.168.1.10
+server2 ansible_host=192.168.1.11
+server3 ansible_host=192.168.1.12
+
+ansible -m ping all
+
+---
+- name: Configuración de Servidor Web en Servidores Linux
+  hosts: web_servers
+  become: true
+
+  tasks:
+    - name: Instalar Apache
+      apt:
+        name: apache2
+        state: present
+        update_cache: true
+      when: ansible_os_family == "Debian"
+
+    - name: Instalar Apache en CentOS
+      yum:
+        name: httpd
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    - name: Habilitar e iniciar el servicio de Apache
+      service:
+        name: "{{ 'apache2' if ansible_os_family == 'Debian' else 'httpd' }}"
+        state: started
+        enabled: true
+
+    - name: Verificar estado del servicio de Apache
+      shell: systemctl status "{{ 'apache2' if ansible_os_family == 'Debian' else 'httpd' }}"
+      register: apache_status
+
+    - name: Mostrar el estado del servicio
+      debug:
+        msg: "{{ apache_status.stdout }}"
+
+ansible-playbook setup_web_servers.yml
+
