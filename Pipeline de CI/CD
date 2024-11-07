@@ -1,0 +1,44 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_ACCESS_KEY_ID = credentials('AWS_ACCESS_KEY_ID')
+        AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
+        DOCKER_IMAGE = 'usuario_dockerhub/nombre_de_tu_imagen:latest' // Reemplaza con el nombre real de la imagen
+        EC2_IP = 'ec2_public_ip' // Reemplaza con la IP pública de tu instancia EC2
+        SSH_KEY = credentials('EC2_SSH_KEY') // Reemplaza con el ID de las credenciales SSH para acceder a EC2
+    }
+
+    stages {
+        stage('Clonar el Repositorio') {
+            steps {
+                git 'https://github.com/tu-usuario/tu-repositorio.git' // Reemplaza con tu repositorio de código
+            }
+        }
+
+        stage('Desplegar en EC2') {
+            steps {
+                script {
+                    // Conectar a EC2 mediante SSH y ejecutar comandos Docker para correr el contenedor
+                    sh """
+                    ssh -o StrictHostKeyChecking=no -i ${SSH_KEY} ec2-user@${EC2_IP} << EOF
+                      docker pull ${DOCKER_IMAGE}
+                      docker stop my_container || true
+                      docker rm my_container || true
+                      docker run -d --name my_container -p 80:80 ${DOCKER_IMAGE}
+                    EOF
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Despliegue completado exitosamente.'
+        }
+        failure {
+            echo 'Error en el despliegue.'
+        }
+    }
+}
